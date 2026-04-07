@@ -26,14 +26,11 @@ const recentComplaints = [
 
 function App() {
   const { user, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState('dashboard')
 
   return (
     <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
       <Sidebar 
-        role={user?.role || 'Citizen'} 
-        activeTab={activeTab} 
-        onTabChange={setActiveTab} 
+        role={user?.role || 'citizen'} 
         onLogout={logout}
       />
       
@@ -42,7 +39,7 @@ function App() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-6 md:px-0 mb-8 sticky top-6 z-10 transition-all">
           <div className="space-y-1">
             <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white capitalize bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              {activeTab ? activeTab.replace('-', ' ') : 'Dashboard'}
+              Dashboard
             </h1>
             <p className="text-sm text-slate-500 font-medium tracking-wide">
               EcoClean Enterprise Suite v1.2.4 — <span className="text-emerald-500/80 uppercase font-black tracking-widest text-[10px] ml-1">Real-time sync</span>
@@ -68,7 +65,7 @@ function App() {
             <div className="flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.05)]">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                <span className="text-xs font-black text-emerald-400 uppercase tracking-tighter">
-                  {user?.role}-Enterprise Access
+                  {user?.role || 'citizen'}-Enterprise Access
                </span>
             </div>
           </div>
@@ -165,6 +162,8 @@ function App() {
   );
 }
 
+export default App
+
 function StatCard({ title, value, change, icon, trend }) {
   return (
     <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
@@ -188,4 +187,4 @@ function StatCard({ title, value, change, icon, trend }) {
   )
 }
 
-export default App
+
