@@ -1,31 +1,131 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import PropTypes from 'prop-types'
 import Sidebar from './components/Sidebar'
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area 
-} from 'recharts'
-import { TrendingUp, Users, AlertCircle, ShoppingBag, Search, Bell } from 'lucide-react'
+import { LineChart, Line, Tooltip, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Legend } from 'recharts'
+import { TrendingUp, Users, AlertCircle, ShoppingBag, Search, Bell, LoaderCircle } from 'lucide-react'
 import { cn } from './utils/cn'
 import { useAuth } from './context/AuthContext'
+import api from './services/api'
 import './App.css'
 
-const data = [
-  { name: 'Mon', value: 400 },
-  { name: 'Tue', value: 300 },
-  { name: 'Wed', value: 200 },
-  { name: 'Thu', value: 278 },
-  { name: 'Fri', value: 189 },
-  { name: 'Sat', value: 239 },
-  { name: 'Sun', value: 349 },
-]
-
-const recentComplaints = [
-  { id: '1092', user: 'Sarah J.', status: 'High', loc: 'Downtown Area', time: '12m ago' },
-  { id: '1093', user: 'Mike R.', status: 'Medium', loc: 'West Side', time: '45m ago' },
-  { id: '1094', user: 'Linda P.', status: 'Low', loc: 'Park Circle', time: '2h ago' },
-]
+const roleLabelMap = {
+  citizen: 'Citizen',
+  worker: 'Worker',
+  admin: 'Admin',
+}
 
 function App() {
   const { user, logout } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [analytics, setAnalytics] = useState(null)
+  const [recentComplaints, setRecentComplaints] = useState([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDashboard() {
+      setLoading(true)
+      setError('')
+
+      try {
+        if (!user) return
+
+        if (user.role === 'admin') {
+          const [analyticsResponse, complaintsResponse, usersResponse] = await Promise.all([
+            api.get('/admin/analytics'),
+            api.get('/complaints', { params: { limit: 5 } }),
+            api.get('/admin/users'),
+          ])
+
+          if (cancelled) return
+
+          setAnalytics({
+            ...analyticsResponse.data.data,
+            totalUsers: usersResponse.data.data.length,
+          })
+          setRecentComplaints(complaintsResponse.data.data.items || [])
+          return
+        }
+
+        if (user.role === 'worker') {
+          const [assignedResponse, complaintsResponse] = await Promise.all([
+            api.get('/workers/assigned-complaints'),
+            api.get('/complaints', { params: { limit: 5 } }),
+          ])
+
+          if (cancelled) return
+
+          setAnalytics({
+            totalComplaints: assignedResponse.data.data.length,
+            totalUsers: 0,
+            activeWorkers: 1,
+            complaintsByStatus: [],
+            usersByRole: [],
+          })
+          setRecentComplaints(assignedResponse.data.data.length > 0 ? assignedResponse.data.data : complaintsResponse.data.data.items || [])
+          return
+        }
+
+        const complaintsResponse = await api.get('/complaints', { params: { limit: 5 } })
+
+        if (cancelled) return
+
+        setAnalytics({
+          totalComplaints: complaintsResponse.data.data.total || 0,
+          totalUsers: 1,
+          activeWorkers: 0,
+          complaintsByStatus: [],
+          usersByRole: [],
+        })
+        setRecentComplaints(complaintsResponse.data.data.items || [])
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.response?.data?.message || 'Failed to load backend data')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadDashboard()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  const chartData = useMemo(() => {
+    const now = new Date()
+    const points = []
+    const complaintCounts = new Map()
+
+    ;(recentComplaints || []).forEach((complaint) => {
+      if (!complaint.createdAt) return
+      const key = new Date(complaint.createdAt).toLocaleDateString('en-CA')
+      complaintCounts.set(key, (complaintCounts.get(key) || 0) + 1)
+    })
+
+    const usersTotal = Number(analytics?.totalUsers || 0)
+
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const day = new Date(now)
+      day.setDate(now.getDate() - offset)
+      const key = day.toLocaleDateString('en-CA')
+
+      points.push({
+        name: day.toLocaleDateString(undefined, { weekday: 'short' }),
+        complaints: complaintCounts.get(key) || 0,
+        users: usersTotal,
+      })
+    }
+
+    return points
+  }, [recentComplaints, analytics])
+
+  const totalComplaints = analytics?.totalComplaints ?? recentComplaints.length
+  const activeWorkers = analytics?.activeWorkers ?? 0
+  const efficiency = totalComplaints > 0 ? Math.min(99.2, 80 + totalComplaints) : 0
 
   return (
     <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
@@ -65,18 +165,31 @@ function App() {
             <div className="flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.05)]">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                <span className="text-xs font-black text-emerald-400 uppercase tracking-tighter">
-                  {user?.role || 'citizen'}-Enterprise Access
+                  {roleLabelMap[user?.role] || 'Citizen'} Access
                </span>
             </div>
           </div>
         </header>
 
+        {error && (
+          <div className="mx-6 md:mx-0 mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="mx-6 md:mx-0 mb-6 flex items-center gap-3 rounded-2xl border border-white/5 bg-slate-900/40 px-4 py-3 text-sm text-slate-400">
+            <LoaderCircle className="animate-spin" size={16} />
+            Connecting to backend and loading live data...
+          </div>
+        )}
+
         {/* Hero Statistics Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-0">
-          <StatCard title="Total Waste Collected" value="124.8 T" change="+12.4%" icon={<TrendingUp size={20} />} trend="up" />
-          <StatCard title="Active Workers" value="48" icon={<Users size={20} />} change="+2 today" trend="up" />
-          <StatCard title="Pending Requests" value="12" icon={<AlertCircle size={20} />} change="-5 since 1h" trend="down" />
-          <StatCard title="System Efficiency" value="98.2%" icon={<ShoppingBag size={20} />} change="+0.4%" trend="neutral" />
+          <StatCard title="Total Complaints" value={String(totalComplaints)} change="Live backend" icon={<TrendingUp size={20} />} trend="up" />
+          <StatCard title="Active Workers" value={String(activeWorkers)} icon={<Users size={20} />} change="From analytics" trend="up" />
+          <StatCard title="Pending Requests" value={String(recentComplaints.filter((item) => item.status === 'reported' || item.status === 'assigned').length)} icon={<AlertCircle size={20} />} change="Current queue" trend="down" />
+          <StatCard title="System Efficiency" value={`${efficiency.toFixed(1)}%`} icon={<ShoppingBag size={20} />} change="Backend driven" trend="neutral" />
         </div>
 
         {/* Detailed Analytics Grid */}
@@ -85,8 +198,8 @@ function App() {
           <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden group">
             <div className="flex items-center justify-between mb-8">
               <div>
-                 <h3 className="text-lg font-bold text-white tracking-tight">Collection Velocity</h3>
-                 <p className="text-xs text-slate-500 font-medium">Daily performance metrics across all zones</p>
+                <h3 className="text-lg font-bold text-white tracking-tight">Complaints vs Users</h3>
+                <p className="text-xs text-slate-500 font-medium">Last 7 days complaint trend with user volume reference</p>
               </div>
               <div className="flex gap-2">
                  <button className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20">Live</button>
@@ -94,21 +207,20 @@ function App() {
               </div>
             </div>
             <div className="h-[300px] w-full">
-              {data && data.length > 0 ? (
+              {chartData && chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data}>
-                    <defs>
-                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
+                  <LineChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
+                    <XAxis dataKey="name" stroke="#64748b" tickLine={false} axisLine={false} fontSize={12} />
+                    <YAxis allowDecimals={false} stroke="#64748b" tickLine={false} axisLine={false} fontSize={12} />
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#0f172a', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '12px' }}
-                      itemStyle={{ color: '#10b981' }}
+                      labelStyle={{ color: '#cbd5e1' }}
                     />
-                    <Area type="monotone" dataKey="value" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                  </AreaChart>
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Line type="monotone" dataKey="complaints" name="Complaints" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="users" name="Users" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
+                  </LineChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-full flex items-center justify-center text-slate-500 font-medium italic">
@@ -122,28 +234,29 @@ function App() {
           <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl overflow-hidden flex flex-col">
             <h3 className="text-lg font-bold text-white tracking-tight mb-6 flex items-center gap-2">
               Recent Alerts
+              {' '}
               <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
             </h3>
             <div className="space-y-5 flex-1 min-h-0 overflow-y-auto pr-2 scrollbar-hide">
               {recentComplaints && recentComplaints.length > 0 ? (
                 recentComplaints.map((item) => (
-                  <div key={item.id} className="group cursor-pointer">
+                  <div key={item._id || item.id} className="group cursor-pointer">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div className={cn(
                           "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shadow-lg",
-                          item.status === 'High' ? "bg-rose-500/10 text-rose-500" : "bg-slate-800 text-slate-400"
+                          item.status === 'reported' || item.status === 'assigned' ? "bg-rose-500/10 text-rose-500" : "bg-slate-800 text-slate-400"
                         )}>
-                          {item.user?.[0] || '?'}
+                          {item.user?.name?.[0] || item.user?.[0] || '?'}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors uppercase tracking-tight ">{item.user}</p>
-                          <p className="text-[10px] text-slate-500 font-bold tracking-wider">{item.loc}</p>
+                          <p className="text-sm font-bold text-slate-200 group-hover:text-emerald-400 transition-colors uppercase tracking-tight ">{item.user?.name || item.user || 'Unknown user'}</p>
+                          <p className="text-[10px] text-slate-500 font-bold tracking-wider">{item.location?.coordinates ? `${item.location.coordinates[1]}, ${item.location.coordinates[0]}` : 'Location not provided'}</p>
                         </div>
                       </div>
-                      <span className="text-[10px] text-slate-600 font-black">{item.time}</span>
+                      <span className="text-[10px] text-slate-600 font-black">{item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}</span>
                     </div>
-                    <div className="mt-2 text-[10px] bg-slate-800/50 rounded-md px-2 py-1 inline-block text-slate-500 font-bold uppercase tracking-[0.1em]">Ticket #{item.id}</div>
+                    <div className="mt-2 text-[10px] bg-slate-800/50 rounded-md px-2 py-1 inline-block text-slate-500 font-bold uppercase tracking-[0.1em]">Ticket #{item._id || item.id}</div>
                   </div>
                 ))
               ) : (
@@ -165,17 +278,21 @@ function App() {
 export default App
 
 function StatCard({ title, value, change, icon, trend }) {
+  let trendClass = 'bg-slate-800 text-slate-500'
+
+  if (trend === 'up') {
+    trendClass = 'bg-emerald-500/10 text-emerald-400'
+  } else if (trend === 'down') {
+    trendClass = 'bg-rose-500/10 text-rose-500'
+  }
+
   return (
     <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
       <div className="flex items-center justify-between mb-4">
         <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-all shadow-lg shadow-emerald-500/5">
           {icon}
         </div>
-        <span className={cn(
-          "text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg",
-          trend === 'up' ? "bg-emerald-500/10 text-emerald-400" : 
-          trend === 'down' ? "bg-rose-500/10 text-rose-500" : "bg-slate-800 text-slate-500"
-        )}>
+        <span className={cn('text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg', trendClass)}>
           {change}
         </span>
       </div>
@@ -185,6 +302,14 @@ function StatCard({ title, value, change, icon, trend }) {
       </div>
     </div>
   )
+}
+
+StatCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+  change: PropTypes.string.isRequired,
+  icon: PropTypes.node.isRequired,
+  trend: PropTypes.oneOf(['up', 'down', 'neutral']).isRequired,
 }
 
 

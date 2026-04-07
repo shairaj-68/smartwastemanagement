@@ -1,7 +1,18 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import api from '../services/api';
 
 const AuthContext = createContext(null);
+
+function normalizeUser(user) {
+  if (!user) return null;
+
+  return {
+    ...user,
+    id: user.id || user._id,
+    _id: user._id || user.id,
+  };
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -13,8 +24,8 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const response = await api.get('/auth/me');
-          setUser(response.data.data);
-        } catch (error) {
+          setUser(normalizeUser(response.data.data.user));
+        } catch {
           // Token invalid, clear
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
@@ -26,40 +37,42 @@ export const AuthProvider = ({ children }) => {
     initAuth();
   }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
     const { user: userData, accessToken, refreshToken } = response.data.data;
 
-    setUser(userData);
+    setUser(normalizeUser(userData));
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-  };
+  }, []);
 
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
     const response = await api.post('/auth/register', userData);
     const { user: newUser, accessToken, refreshToken } = response.data.data;
 
-    setUser(newUser);
+    setUser(normalizeUser(newUser));
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
-    } catch (error) {
+    } catch {
       // Ignore
     }
     setUser(null);
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  const value = useMemo(() => ({ user, login, register, logout, loading }), [user, login, register, logout, loading]);
+
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+};
+
+AuthProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 };
 
 export const useAuth = () => {

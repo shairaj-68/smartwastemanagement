@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 
 const NotificationContext = createContext(null);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
@@ -10,8 +12,8 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     if (user) {
-      const socket = io('/'); // Adjust URL if needed
-      socket.emit('join-user-room', user.id);
+      const socket = io(SOCKET_URL, { withCredentials: true });
+      socket.emit('join-user-room', user.id || user._id);
 
       socket.on('notification', (notification) => {
         setNotifications(prev => [notification, ...prev]);
@@ -23,15 +25,21 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [user]);
 
-  const addNotification = (notification) => {
+  const addNotification = useCallback((notification) => {
     setNotifications(prev => [notification, ...prev]);
-  };
+  }, []);
+
+  const value = useMemo(() => ({ notifications, addNotification }), [notifications, addNotification]);
 
   return (
-    <NotificationContext.Provider value={{ notifications, addNotification }}>
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );
+};
+
+NotificationProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 };
 
 export const useNotifications = () => {
