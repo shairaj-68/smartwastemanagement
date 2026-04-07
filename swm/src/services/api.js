@@ -1,16 +1,24 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+
 // Create axios instance
 const api = axios.create({
-  baseURL: '/api/v1',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  baseURL: API_BASE_URL,
 });
 
 // Request interceptor to add token
 api.interceptors.request.use(
   (config) => {
+    // Let the browser/axios set multipart boundaries for FormData uploads.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+      if (typeof config.headers.setContentType === 'function') {
+        config.headers.setContentType(false);
+      } else {
+        delete config.headers['Content-Type'];
+      }
+    }
+
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -32,7 +40,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post('/api/v1/auth/refresh', { refreshToken });
+          const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
           const { accessToken } = response.data.data;
 
           localStorage.setItem('accessToken', accessToken);
@@ -40,15 +48,14 @@ api.interceptors.response.use(
 
           return api(originalRequest);
         }
-      } catch (refreshError) {
-        // Refresh failed, logout
+      } catch {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+        globalThis.location.href = '/login';
       }
     }
 
-    return Promise.reject(error);
+    throw error;
   }
 );
 

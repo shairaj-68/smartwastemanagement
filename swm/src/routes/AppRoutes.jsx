@@ -7,6 +7,8 @@ import Complaints from '../pages/Complaints';
 import CreateComplaint from '../pages/CreateComplaint';
 import Worker from '../pages/Worker';
 import Admin from '../pages/Admin';
+import Notifications from '../pages/Notifications';
+import Profile from '../pages/Profile';
 import ProtectedRoute from './ProtectedRoute';
 
 const AppRoutes = () => {
@@ -22,7 +24,9 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<App />} />
         <Route path="/complaints" element={<Complaints />} />
         <Route path="/create-complaint" element={<CreateComplaint />} />
-        <Route path="/worker" element={<ProtectedRoute allowedRoles={['worker']}><Worker /></ProtectedRoute>} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/worker" element={<ProtectedRoute allowedRoles={['worker', 'admin']}><Worker /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
       </Route>
 

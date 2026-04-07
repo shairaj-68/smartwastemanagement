@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 import { env } from './config/env.js';
 import { swaggerSpec } from './config/swagger.js';
@@ -14,6 +15,7 @@ import { notFoundHandler } from './middleware/not-found.middleware.js';
 import { errorHandler } from './middleware/error.middleware.js';
 
 const app = express();
+const uploadsDir = fileURLToPath(new URL('../uploads/', import.meta.url));
 
 app.use(helmet());
 app.use(
@@ -30,6 +32,7 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+app.use('/uploads', express.static(uploadsDir));
 
 app.use(
   rateLimit({
