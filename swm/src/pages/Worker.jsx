@@ -4,12 +4,14 @@ import { Clock, MapPin, AlertCircle, RefreshCw, Search, CheckCircle2, Timer, Bri
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import AdminLayout from '../layouts/AdminLayout';
 
 const ACTIVE_STATUSES = new Set(['assigned', 'in_progress']);
 
 const Worker = () => {
   const { user, logout } = useAuth();
   const [complaints, setComplaints] = useState([]);
+  const [bins, setBins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,6 +39,7 @@ const Worker = () => {
   }, []);
 
   const updateStatus = async (id, status) => {
+    setComplaintUpdating(id);
     try {
       await api.patch(`/workers/complaints/${id}/status`, { status });
       fetchAssignedComplaints();
@@ -183,6 +186,12 @@ const Worker = () => {
                     No activity yet.
                   </div>
                 )}
+                {(complaint.status === 'resolved' || complaint.status === 'cleaned') && (
+                  <div className="flex-1 px-4 py-2 bg-green-500/20 text-green-400 font-bold rounded-lg flex items-center justify-center gap-2 text-sm border border-green-500/20">
+                    <CheckCircle size={14} />
+                    Resolved
+                  </div>
+                )}
               </div>
             </section>
 
@@ -294,6 +303,7 @@ const Worker = () => {
         </div>
       </main>
     </div>
+    </AdminLayout>
   );
 };
 

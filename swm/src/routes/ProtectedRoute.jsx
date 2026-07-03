@@ -6,14 +6,17 @@ import { useAuth } from '../context/AuthContext';
 const ProtectedRoute = ({ allowedRoles = [], children = null }) => {
   const { user, loading } = useAuth();
 
-  if (loading) return null; // Or a loading spinner
+  if (loading) return null;
 
-  if (!user) {
+  
+  const hasToken = !!localStorage.getItem('accessToken');
+
+  if (!user && !hasToken) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+  if (user && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (children) {

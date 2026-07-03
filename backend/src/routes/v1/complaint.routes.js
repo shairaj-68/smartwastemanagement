@@ -20,7 +20,7 @@ import {
 
 const router = Router();
 
-router.post('/', verifyToken, authorizeRole('citizen', 'admin'), validate(createComplaintSchema), asyncHandler(submitComplaint));
+router.post('/', verifyToken, authorizeRole('citizen', 'worker', 'admin'), validate(createComplaintSchema), asyncHandler(submitComplaint));
 router.get('/', verifyToken, asyncHandler(listComplaints));
 router.get('/nearby/search', verifyToken, validate(nearbyQuerySchema, 'query'), asyncHandler(listNearbyComplaints));
 router.get('/:id', verifyToken, asyncHandler(getComplaintById));

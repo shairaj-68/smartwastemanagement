@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
-const menuGroups = [
+const MENU_GROUPS = [
   {
     title: 'MAIN',
     items: [
@@ -49,7 +49,7 @@ function SidebarContent({ role, isCollapsed, onToggleCollapse, onNavigate, locat
       <div className="flex items-center justify-between p-4 h-16 border-b border-white/5 bg-slate-900/50 backdrop-blur-md sticky top-0 z-20">
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center text-white shadow-lg shadow-green-500/20">
-            <Trash2 size={22} className="stroke-[2.5]" />
+            <Trash2 size={20} className="stroke-[2.5]" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
@@ -122,7 +122,7 @@ function SidebarContent({ role, isCollapsed, onToggleCollapse, onNavigate, locat
           </div>
           {!isCollapsed && (
             <div className="ml-3 overflow-hidden">
-              <p className="text-sm font-bold text-white truncate">{role} Mode</p>
+              <p className="text-sm font-bold text-white capitalize truncate">{role}</p>
               <p className="text-[10px] text-slate-500 font-medium">Enterprise Access</p>
             </div>
           )}
@@ -170,10 +170,12 @@ const Sidebar = ({ role = 'citizen', onLogout }) => {
         type="button"
         onClick={() => setIsMobileOpen((current) => !current)}
         className="md:hidden fixed top-4 right-4 z-50 p-2 bg-slate-900 rounded-xl shadow-2xl border border-white/5 text-white"
+        aria-label="Toggle menu"
       >
-        {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
+        {isMobileOpen ? <X size={22} /> : <Menu size={22} />}
       </button>
 
+      {/* Mobile backdrop */}
       {isMobileOpen && (
         <button
           type="button"

@@ -58,5 +58,9 @@ export async function uploadImageBuffer(buffer, folder = 'smart-waste') {
 
 export async function deleteCloudinaryAsset(publicId) {
   if (!publicId) return;
-  await cloudinary.uploader.destroy(publicId);
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (error) {
+    console.error('Cloudinary delete error:', error.message);
+  }
 }

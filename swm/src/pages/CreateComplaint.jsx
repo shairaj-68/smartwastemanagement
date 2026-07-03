@@ -5,14 +5,24 @@ import api from '../services/api';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 
+const COMPLAINT_TYPES = [
+  { value: 'overflow', label: 'Bin Overflow' },
+  { value: 'missed_pickup', label: 'Missed Pickup' },
+  { value: 'illegal_dumping', label: 'Illegal Dumping' },
+  { value: 'bin_damage', label: 'Bin Damage' },
+  { value: 'other', label: 'Other' },
+];
+
 const CreateComplaint = () => {
   const [formData, setFormData] = useState({
+    type: 'other',
     description: '',
     coordinates: null,
     image: null,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 

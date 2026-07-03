@@ -1,6 +1,16 @@
 {
+  "name": "smartwastemanagement",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd swm && npm run dev -- --host 0.0.0.0",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "autoprefixer": "^10.4.27",
+    "concurrently": "^8.2.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2"
   }

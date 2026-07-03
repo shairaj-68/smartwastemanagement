@@ -4,6 +4,7 @@ import { Users, BarChart3, UserCheck, Shield, ClipboardList, Activity, Trash2, U
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import AdminLayout from '../layouts/AdminLayout';
 
 const ACTIVE_STATUSES = new Set(['reported', 'assigned', 'in_progress']);
 const RESOLVED_STATUSES = new Set(['cleaned', 'closed']);
@@ -11,7 +12,7 @@ const RESOLVED_STATUSES = new Set(['cleaned', 'closed']);
 const Admin = () => {
   const { user, logout } = useAuth();
   const [users, setUsers] = useState([]);
-  const [analytics, setAnalytics] = useState({});
+  const [kpi, setKpi] = useState({ activeComplaints: 0, resolvedToday: 0, binsNearFull: 0, workersOnDuty: 0 });
   const [complaints, setComplaints] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,9 @@ const Admin = () => {
       setError(assignError.response?.data?.message || 'Error assigning worker');
     }
   };
+
+  const workerUsers = users.filter((user) => user.role === 'worker');
+
 
   const deleteComplaint = async (id) => {
     if (globalThis.confirm('Are you sure you want to delete this complaint?')) {
@@ -106,6 +110,16 @@ const Admin = () => {
       }));
   }, [complaints]);
 
+  const STATUS_STYLE = {
+    pending:     'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    assigned:    'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    in_progress: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    resolved:    'bg-green-500/10 text-green-400 border-green-500/20',
+    cleaned:     'bg-green-500/10 text-green-400 border-green-500/20',
+    closed:      'bg-slate-700/10 text-slate-400 border-slate-700/20',
+    rejected:    'bg-red-500/10 text-red-400 border-red-500/20',
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
       <Sidebar role={user?.role || 'admin'} onLogout={logout} />
@@ -134,6 +148,36 @@ const Admin = () => {
                     Export Report
                   </button>
                 </div>
+              </div>
+
+              {/* Assign Worker */}
+              <div className="flex items-center gap-3">
+                {complaint.assignedWorker ? (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs font-bold text-blue-400">
+                    <UserCheck size={14} />
+                    Assigned to {complaint.assignedWorker.name || 'Worker'}
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      value={selectedWorker[complaint._id] || ''}
+                      onChange={e => setSelectedWorker(prev => ({ ...prev, [complaint._id]: e.target.value }))}
+                      className="flex-1 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500/40 transition-colors"
+                    >
+                      <option value="">Select worker to assign</option>
+                      {workerUsers.map(w => (
+                        <option key={w._id} value={w._id}>{w.name} ({w.email})</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => assignWorker(complaint._id)}
+                      disabled={!selectedWorker[complaint._id]}
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black text-xs rounded-xl transition-colors uppercase tracking-widest"
+                    >
+                      Assign
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 

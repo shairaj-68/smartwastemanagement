@@ -127,40 +127,31 @@ function App() {
   const activeWorkers = analytics?.activeWorkers ?? 0
   const efficiency = totalComplaints > 0 ? Math.min(99.2, 80 + totalComplaints) : 0
 
-  return (
-    <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
-      <Sidebar 
-        role={user?.role || 'citizen'} 
-        onLogout={logout}
-      />
-      
-      <main className="flex-1 min-w-0 transition-all duration-300 lg:px-8 py-6">
-        {/* Modern Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-6 md:px-0 mb-8 sticky top-6 z-10 transition-all">
-          <div className="space-y-1">
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-white capitalize bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              Dashboard
-            </h1>
-            <p className="text-sm text-slate-500 font-medium tracking-wide">
-              EcoClean Enterprise Suite v1.2.4 — <span className="text-emerald-500/80 uppercase font-black tracking-widest text-[10px] ml-1">Real-time sync</span>
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="relative hidden lg:block group">
-               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-emerald-500 transition-colors" size={18} />
-               <input 
-                type="text" 
-                placeholder="Global Search..."
-                className="bg-slate-900/50 border border-white/5 rounded-xl text-sm pl-10 pr-4 py-2.5 w-64 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:bg-slate-900 transition-all placeholder:text-slate-600 font-medium"
-               />
-            </div>
-            
-            <button className="p-2.5 bg-slate-900/50 border border-white/5 rounded-xl hover:bg-slate-900 hover:border-emerald-500/20 transition-all group">
-              <Bell size={20} className="text-slate-400 group-hover:text-emerald-400 transition-colors" />
-            </button>
+  useEffect(() => {
+    api.get('/admin/analytics').then(r => {
+      const d = r.data.data || {}
+      setKpi({
+        activeComplaints: d.activeComplaints ?? 0,
+        resolvedToday:    d.resolvedToday    ?? 0,
+        binsNearFull:     d.binsNearFull     ?? 0,
+        workersOnDuty:    d.workersOnDuty    ?? 0,
+      })
+      // Build chart from complaintsByStatus
+      const statusMap = {}
+      ;(d.complaintsByStatus || []).forEach(s => { statusMap[s._id] = s.count })
+      setChartData([
+        { name: 'Pending',     value: statusMap['pending']     || 0 },
+        { name: 'Assigned',    value: statusMap['assigned']    || 0 },
+        { name: 'In Progress', value: statusMap['in_progress'] || 0 },
+        { name: 'Resolved',    value: (statusMap['resolved'] || 0) + (statusMap['cleaned'] || 0) },
+        { name: 'Closed',      value: statusMap['closed']      || 0 },
+      ])
+    }).catch(() => {})
 
-            <div className="h-10 w-[1px] bg-white/5 mx-2" />
+    api.get('/complaints', { params: { limit: 5 } }).then(r => {
+      setRecentComplaints(r.data.data?.items || [])
+    }).catch(() => {})
+  }, [])
 
             <div className="flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.05)]">
                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -192,11 +183,12 @@ function App() {
           <StatCard title="System Efficiency" value={`${efficiency.toFixed(1)}%`} icon={<ShoppingBag size={20} />} change="Backend driven" trend="neutral" />
         </div>
 
-        {/* Detailed Analytics Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8 px-6 md:px-0">
-          {/* Main Chart */}
-          <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl relative overflow-hidden group">
-            <div className="flex items-center justify-between mb-8">
+        {/* Bottom Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+
+          {/* Complaints by Status Chart */}
+          <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-lg font-bold text-white tracking-tight">Complaints vs Users</h3>
                 <p className="text-xs text-slate-500 font-medium">Last 7 days complaint trend with user volume reference</p>
@@ -205,6 +197,9 @@ function App() {
                  <button className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20">Live</button>
                  <button className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">History</button>
               </div>
+              <span className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20">
+                Live
+              </span>
             </div>
             <div className="h-[300px] w-full">
               {chartData && chartData.length > 0 ? (
@@ -223,15 +218,24 @@ function App() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-slate-500 font-medium italic">
-                  Waiting for collection data...
+                <div className="h-full flex items-center justify-center text-slate-600 text-sm font-bold uppercase tracking-widest">
+                  No complaint data yet
                 </div>
               )}
             </div>
+            {/* Status legend */}
+            <div className="flex flex-wrap gap-3 mt-4">
+              {chartData.map(d => (
+                <div key={d.name} className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 opacity-70" />
+                  {d.name}: <span className="text-white font-black">{d.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Activity Feed */}
-          <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl overflow-hidden flex flex-col">
+          {/* Recent Complaints Feed */}
+          <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl flex flex-col">
             <h3 className="text-lg font-bold text-white tracking-tight mb-6 flex items-center gap-2">
               Recent Alerts
               {' '}
@@ -258,21 +262,28 @@ function App() {
                     </div>
                     <div className="mt-2 text-[10px] bg-slate-800/50 rounded-md px-2 py-1 inline-block text-slate-500 font-bold uppercase tracking-[0.1em]">Ticket #{item._id || item.id}</div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-10 text-slate-600 text-xs font-bold uppercase tracking-widest italic">
-                  No active alerts
+                  <div className="flex items-center gap-1 mt-1.5 ml-12 text-[10px] text-slate-600 font-bold">
+                    <Clock size={9} />
+                    {new Date(c.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              )) : (
+                <div className="flex-1 flex items-center justify-center text-slate-600 text-xs font-bold uppercase tracking-widest">
+                  No complaints yet
                 </div>
               )}
             </div>
-            <button className="w-full py-4 mt-6 bg-slate-800/50 hover:bg-emerald-500 hover:text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5 hover:border-emerald-500">
-               Audit logs
+
+            <button
+              onClick={() => navigate('/complaints')}
+              className="w-full py-3 mt-6 bg-slate-800/50 hover:bg-emerald-500 hover:text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all border border-white/5 hover:border-emerald-500 flex items-center justify-center gap-2"
+            >
+              <Zap size={12} /> View All Complaints
             </button>
           </div>
         </div>
-      </main>
-    </div>
-  );
+      </AdminLayout>
+  )
 }
 
 export default App
@@ -289,17 +300,15 @@ function StatCard({ title, value, change, icon, trend }) {
   return (
     <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
       <div className="flex items-center justify-between mb-4">
-        <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-all shadow-lg shadow-emerald-500/5">
+        <div className={cn('p-2.5 rounded-xl transition-all shadow-lg', iconBg, iconColor, iconHover)}>
           {icon}
         </div>
         <span className={cn('text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg', trendClass)}>
           {change}
         </span>
       </div>
-      <div>
-        <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">{title}</h4>
-        <p className="text-2xl font-black text-white">{value}</p>
-      </div>
+      <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">{title}</h4>
+      <p className={cn('text-3xl font-black', valueColor)}>{value}</p>
     </div>
   )
 }
