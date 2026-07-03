@@ -4,6 +4,11 @@ const notificationSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     message: { type: String, required: true, trim: true },
+    type: {
+      type: String,
+      enum: ['info', 'warning', 'critical'],
+      default: 'info',
+    },
     status: {
       type: String,
       enum: ['unread', 'read'],

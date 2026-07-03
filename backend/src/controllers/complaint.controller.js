@@ -1,16 +1,31 @@
 import { Complaint } from '../models/Complaint.js';
+import { User } from '../models/User.js';
 import { uploadImageBuffer } from '../services/cloudinary.service.js';
 import { sendNotification } from '../services/notification.service.js';
 
 export async function submitComplaint(req, res) {
   const complaint = await Complaint.create({
     user: req.user._id,
+    type: req.body.type || 'other',
     description: req.body.description,
     location: {
       type: 'Point',
       coordinates: req.body.coordinates,
     },
+    status: 'pending',
   });
+
+  // Notify all admins about new complaint
+  const admins = await User.find({ role: 'admin' }).select('_id');
+  await Promise.all(
+    admins.map(admin =>
+      sendNotification(
+        admin._id,
+        `New complaint submitted: "${complaint.description.slice(0, 60)}" [${complaint.type}]`,
+        'warning'
+      )
+    )
+  );
 
   return res.status(201).json({
     status: 'success',
@@ -77,17 +92,41 @@ export async function listComplaints(req, res) {
 }
 
 export async function updateComplaintStatus(req, res) {
-  const complaint = await Complaint.findById(req.params.id);
+  const complaint = await Complaint.findById(req.params.id).populate('user', '_id name');
   if (!complaint) {
     return res.status(404).json({ status: 'error', message: 'Complaint not found' });
   }
 
+  const prevStatus = complaint.status;
   complaint.status = req.body.status;
+  if (req.body.status === 'in_progress' && !complaint.assignedWorker) {
+    complaint.assignedWorker = req.user._id;
+  }
   await complaint.save();
 
-  if (complaint.user) {
-    await sendNotification(complaint.user, `Complaint status updated to ${complaint.status}`);
+  const statusLabel = { in_progress: 'In Progress', resolved: 'Resolved', pending: 'Pending' }[complaint.status] || complaint.status;
+  const workerName = req.user.name || 'A worker';
+
+  // Notify citizen
+  if (complaint.user?._id) {
+    await sendNotification(
+      complaint.user._id,
+      `Your complaint "${complaint.description.slice(0, 50)}" is now ${statusLabel} — updated by ${workerName}`,
+      complaint.status === 'resolved' || complaint.status === 'cleaned' ? 'info' : 'info'
+    );
   }
+
+  // Notify admins
+  const admins = await User.find({ role: 'admin' }).select('_id');
+  await Promise.all(
+    admins.map(admin =>
+      sendNotification(
+        admin._id,
+        `Complaint status changed from ${prevStatus} → ${complaint.status} by ${workerName}`,
+        'info'
+      )
+    )
+  );
 
   return res.status(200).json({
     status: 'success',
@@ -110,19 +149,27 @@ export async function uploadComplaintImage(req, res) {
     return res.status(403).json({ status: 'error', message: 'Not allowed to upload for this complaint' });
   }
 
-  const uploadResult = await uploadImageBuffer(req.file.buffer, 'smart-waste/complaints');
-  complaint.imageUrl = uploadResult.secure_url;
-  complaint.imagePublicId = uploadResult.public_id;
-  await complaint.save();
+  try {
+    const uploadResult = await uploadImageBuffer(req.file.buffer, 'smart-waste/complaints');
+    complaint.imageUrl = uploadResult.secure_url;
+    complaint.imagePublicId = uploadResult.public_id;
+    await complaint.save();
 
-  return res.status(200).json({
-    status: 'success',
-    message: 'Image uploaded',
-    data: {
-      complaintId: complaint._id,
-      imageUrl: complaint.imageUrl,
-    },
-  });
+    return res.status(200).json({
+      status: 'success',
+      message: 'Image uploaded',
+      data: {
+        complaintId: complaint._id,
+        imageUrl: complaint.imageUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Cloudinary upload error:', error);
+    return res.status(500).json({ 
+      status: 'error', 
+      message: 'Image upload failed. Complaint was created but image could not be uploaded.' 
+    });
+  }
 }
 
 export async function listNearbyComplaints(req, res) {

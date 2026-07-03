@@ -25,10 +25,13 @@ const Register = () => {
     setLoading(true);
     setError('');
     try {
-      await register(formData);
-      navigate('/');
+      const newUser = await register(formData);
+      const role = newUser?.role || formData.role;
+      if (role === 'admin') navigate('/admin', { replace: true });
+      else if (role === 'worker') navigate('/worker', { replace: true });
+      else navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

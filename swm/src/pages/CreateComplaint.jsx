@@ -1,17 +1,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Upload, Send, AlertCircle } from 'lucide-react';
+import { MapPin, Upload, Send, AlertCircle, CheckCircle, Tag } from 'lucide-react';
 import { cn } from '../utils/cn';
 import api from '../services/api';
 
+const COMPLAINT_TYPES = [
+  { value: 'overflow', label: 'Bin Overflow' },
+  { value: 'missed_pickup', label: 'Missed Pickup' },
+  { value: 'illegal_dumping', label: 'Illegal Dumping' },
+  { value: 'bin_damage', label: 'Bin Damage' },
+  { value: 'other', label: 'Other' },
+];
+
 const CreateComplaint = () => {
   const [formData, setFormData] = useState({
+    type: 'other',
     description: '',
     coordinates: null,
     image: null,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -49,20 +59,35 @@ const CreateComplaint = () => {
     setError('');
 
     try {
-      const data = new FormData();
-      data.append('description', formData.description);
-      if (formData.coordinates) {
-        data.append('coordinates', JSON.stringify(formData.coordinates));
+      if (!formData.coordinates) {
+        setError('Please set location before submitting');
+        setLoading(false);
+        return;
       }
+
+      const payload = {
+        type: formData.type,
+        description: formData.description,
+        coordinates: formData.coordinates,
+      };
+
+      const response = await api.post('/complaints', payload);
+      const complaintId = response.data.data._id;
+
       if (formData.image) {
-        data.append('image', formData.image);
+        try {
+          const imageData = new FormData();
+          imageData.append('image', formData.image);
+          await api.post(`/complaints/${complaintId}/image`, imageData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (imageErr) {
+          console.warn('Image upload failed, complaint created:', imageErr);
+        }
       }
 
-      await api.post('/complaints', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      navigate('/complaints');
+      setSuccess(true);
+      setTimeout(() => navigate('/complaints'), 1500);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create complaint');
     } finally {
@@ -71,11 +96,19 @@ const CreateComplaint = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-2xl p-8 border border-white/5 shadow-2xl">
       <div>
-        <h1 className="text-2xl font-black text-white">Create New Complaint</h1>
-        <p className="text-slate-500">Report waste collection issues in your area</p>
+        <h1 className="text-2xl font-black text-white">Report a Complaint</h1>
+        <p className="text-slate-500">Submit a waste collection issue — workers will be notified immediately</p>
+        <p className="text-xs text-slate-600 mt-1">{new Date().toLocaleString()}</p>
       </div>
+
+      {success && (
+        <div className="flex items-center gap-2 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 font-bold">
+          <CheckCircle size={18} />
+          Complaint submitted! Redirecting...
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
@@ -84,6 +117,30 @@ const CreateComplaint = () => {
             {error}
           </div>
         )}
+
+        {/* Type */}
+        <div>
+          <label className="block text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
+            <Tag size={14} /> Complaint Type
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {COMPLAINT_TYPES.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFormData({ ...formData, type: value })}
+                className={cn(
+                  'px-3 py-2 rounded-xl border text-xs font-bold transition-all',
+                  formData.type === value
+                    ? 'bg-emerald-500 border-emerald-500 text-slate-950'
+                    : 'bg-slate-900 border-white/5 text-slate-400 hover:border-white/20 hover:text-white'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div>
           <label className="block text-sm font-bold text-slate-300 mb-2">Description</label>

@@ -17,10 +17,16 @@ const complaintSchema = new mongoose.Schema(
       },
     },
     description: { type: String, required: true, trim: true },
+    type: {
+      type: String,
+      enum: ['overflow', 'missed_pickup', 'illegal_dumping', 'bin_damage', 'other'],
+      default: 'other',
+      index: true,
+    },
     status: {
       type: String,
-      enum: ['reported', 'assigned', 'in_progress', 'cleaned', 'closed', 'rejected'],
-      default: 'reported',
+      enum: ['pending', 'in_progress', 'resolved', 'reported', 'assigned', 'cleaned', 'closed', 'rejected'],
+      default: 'pending',
       index: true,
     },
     assignedWorker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },

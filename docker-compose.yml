@@ -3,8 +3,6 @@ services:
     image: mongo:7
     container_name: swm-mongo
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     volumes:
       - mongo-data:/data/db
 
@@ -12,19 +10,32 @@ services:
     build:
       context: ./backend
     container_name: swm-backend
+    restart: unless-stopped
     depends_on:
       - mongo
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: 5000
-      CLIENT_ORIGIN: http://localhost:5173
+      CLIENT_ORIGIN: http://localhost
       MONGO_URI: mongodb://mongo:27017/swm
-      JWT_ACCESS_SECRET: replace-me
-      JWT_REFRESH_SECRET: replace-me
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+  frontend:
+    build:
+      context: ./swm
+    container_name: swm-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
     ports:
-      - "5000:5000"
+      - "80:80"
 
 volumes:
   mongo-data:

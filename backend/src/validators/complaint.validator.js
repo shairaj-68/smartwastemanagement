@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const createComplaintSchema = z.object({
+  type: z.enum(['overflow', 'missed_pickup', 'illegal_dumping', 'bin_damage', 'other']).default('other'),
   description: z.string().min(5).max(500),
   coordinates: z
     .array(z.number())
@@ -11,7 +12,7 @@ export const createComplaintSchema = z.object({
 });
 
 export const updateComplaintStatusSchema = z.object({
-  status: z.enum(['reported', 'assigned', 'in_progress', 'cleaned', 'closed', 'rejected']),
+  status: z.enum(['pending', 'in_progress', 'resolved', 'reported', 'assigned', 'cleaned', 'closed', 'rejected']),
 });
 
 export const nearbyQuerySchema = z.object({

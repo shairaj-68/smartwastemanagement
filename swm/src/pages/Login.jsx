@@ -17,10 +17,13 @@ const Login = () => {
     setLoading(true);
     setError('');
     try {
-      await login(email, password);
-      navigate('/');
+      const loggedInUser = await login(email, password);
+      const role = loggedInUser?.role;
+      if (role === 'admin') navigate('/admin', { replace: true });
+      else if (role === 'worker') navigate('/worker', { replace: true });
+      else navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }

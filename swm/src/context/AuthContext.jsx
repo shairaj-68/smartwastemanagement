@@ -13,7 +13,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const response = await api.get('/auth/me');
-          setUser(response.data.data);
+          setUser(response.data.data.user);
         } catch (error) {
           // Token invalid, clear
           localStorage.removeItem('accessToken');
@@ -29,19 +29,19 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
     const { user: userData, accessToken, refreshToken } = response.data.data;
-
-    setUser(userData);
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    setUser(userData);
+    return userData;
   };
 
   const register = async (userData) => {
     const response = await api.post('/auth/register', userData);
     const { user: newUser, accessToken, refreshToken } = response.data.data;
-
-    setUser(newUser);
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    setUser(newUser);
+    return newUser;
   };
 
   const logout = async () => {

@@ -8,20 +8,32 @@ cloudinary.config({
 });
 
 export async function uploadImageBuffer(buffer, folder = 'smart-waste') {
-  if (!env.nodeEnv || !process.env.CLOUDINARY_CLOUD_NAME) {
-    throw new Error('Cloudinary is not configured');
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  
+  // Check if Cloudinary is properly configured
+  if (!cloudName || cloudName === 'Root' || cloudName === 'root') {
+    throw new Error('Cloudinary is not properly configured. Please set a valid CLOUDINARY_CLOUD_NAME in .env');
   }
 
-  const base64 = buffer.toString('base64');
-  const dataUri = `data:image/jpeg;base64,${base64}`;
+  try {
+    const base64 = buffer.toString('base64');
+    const dataUri = `data:image/jpeg;base64,${base64}`;
 
-  return cloudinary.uploader.upload(dataUri, {
-    folder,
-    resource_type: 'image',
-  });
+    return await cloudinary.uploader.upload(dataUri, {
+      folder,
+      resource_type: 'image',
+    });
+  } catch (error) {
+    console.error('Cloudinary upload error:', error.message);
+    throw new Error(`Image upload failed: ${error.message}`);
+  }
 }
 
 export async function deleteCloudinaryAsset(publicId) {
   if (!publicId) return;
-  await cloudinary.uploader.destroy(publicId);
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (error) {
+    console.error('Cloudinary delete error:', error.message);
+  }
 }
