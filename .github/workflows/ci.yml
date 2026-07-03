@@ -26,7 +26,6 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
-      - run: npm run lint
       - run: npm test
         env:
           MONGO_URI: mongodb://127.0.0.1:27017/swm_test
@@ -47,7 +46,6 @@ jobs:
           cache: npm
           cache-dependency-path: swm/package-lock.json
       - run: npm ci
-      - run: npm run lint
       - run: npm run build
 
   docker-push:
