@@ -24,7 +24,7 @@ const AppRoutes = () => {
         <Route path="/create-complaint" element={<CreateComplaint />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/worker" element={<ProtectedRoute allowedRoles={['worker']}><Worker /></ProtectedRoute>} />
+        <Route path="/worker" element={<ProtectedRoute allowedRoles={['worker', 'admin']}><Worker /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><Admin /></ProtectedRoute>} />
       </Route>
 

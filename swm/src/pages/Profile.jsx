@@ -1,80 +1,87 @@
+import React, { useMemo } from 'react';
+import { Mail, Shield, CalendarClock, Phone, MapPinned } from 'lucide-react';
+import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
-import { User, Mail, Shield, Calendar, LogOut } from 'lucide-react';
-import { cn } from '../utils/cn';
-import AdminLayout from '../layouts/AdminLayout';
-
-const ROLE_STYLE = {
-  admin:   'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  worker:  'bg-blue-500/10   text-blue-400   border-blue-500/20',
-  citizen: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-};
 
 const Profile = () => {
   const { user, logout } = useAuth();
 
-  const fields = [
-    { icon: User,     label: 'Full Name',    value: user?.name  || '—' },
-    { icon: Mail,     label: 'Email',        value: user?.email || '—' },
-    { icon: Shield,   label: 'Role',         value: user?.role  || '—', isRole: true },
-    { icon: Calendar, label: 'Member Since', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—' },
+  const joinedDate = useMemo(() => {
+    if (!user?.createdAt) return 'Unknown';
+    return new Date(user.createdAt).toLocaleDateString();
+  }, [user?.createdAt]);
+
+  const profileItems = [
+    {
+      label: 'Email',
+      value: user?.email || 'Not available',
+      icon: Mail,
+    },
+    {
+      label: 'Role',
+      value: user?.role || 'citizen',
+      icon: Shield,
+    },
+    {
+      label: 'Phone',
+      value: user?.phone || 'Not set',
+      icon: Phone,
+    },
+    {
+      label: 'Address',
+      value: user?.address || 'Not set',
+      icon: MapPinned,
+    },
+    {
+      label: 'Joined',
+      value: joinedDate,
+      icon: CalendarClock,
+    },
   ];
 
   return (
-    <AdminLayout title="Profile" subtitle="EcoClean Smart Waste">
-      <div className="max-w-2xl space-y-6">
+    <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
+      <Sidebar role={user?.role || 'citizen'} onLogout={logout} />
 
-        {/* Avatar card */}
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] p-8 shadow-2xl flex items-center gap-6">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center text-white text-3xl font-black shadow-lg shadow-green-500/20 flex-shrink-0">
-            {user?.name?.[0]?.toUpperCase() || '?'}
-          </div>
-          <div>
-            <h2 className="text-2xl font-black text-white">{user?.name || 'Unknown'}</h2>
-            <p className="text-slate-500 text-sm mt-0.5">{user?.email}</p>
-            <span className={cn('inline-block mt-2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border', ROLE_STYLE[user?.role] || ROLE_STYLE.citizen)}>
-              {user?.role}
-            </span>
-          </div>
-        </div>
-
-        {/* Details panel */}
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] shadow-2xl overflow-hidden">
-          <div className="p-6 border-b border-white/5">
-            <h3 className="text-lg font-bold text-white tracking-tight">Account Details</h3>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">Your profile information</p>
-          </div>
-          <div className="divide-y divide-white/5">
-            {fields.map(({ icon: Icon, label, value, isRole }) => (
-              <div key={label} className="flex items-center gap-4 px-6 py-4">
-                <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center flex-shrink-0">
-                  <Icon size={16} className="text-slate-400" />
+      <main className="flex-1 min-w-0 transition-all duration-300 lg:px-8 py-6">
+        <div className="px-6 md:px-0">
+          <div className="mx-auto max-w-5xl space-y-8">
+            <div className="rounded-[2rem] border border-white/5 bg-slate-900/40 p-6 md:p-8 shadow-2xl backdrop-blur-sm relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.08),transparent_28%)] pointer-events-none" />
+              <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-2">
+                  <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">Profile</h1>
+                  <p className="text-sm md:text-base text-slate-400">Account details and role information for your Smart Waste access.</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</p>
-                  {isRole ? (
-                    <span className={cn('inline-block mt-0.5 px-2 py-0.5 rounded-lg text-xs font-black uppercase tracking-widest border', ROLE_STYLE[value] || ROLE_STYLE.citizen)}>
-                      {value}
-                    </span>
-                  ) : (
-                    <p className="text-sm font-semibold text-white mt-0.5 truncate">{value}</p>
-                  )}
-                </div>
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-green-600 shadow-lg shadow-emerald-500/20" />
               </div>
-            ))}
+            </div>
+
+            <div className="rounded-[2rem] border border-white/5 bg-slate-900/40 p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+              <div className="mb-6">
+                <h2 className="text-xl font-black text-white">{user?.name || 'User'}</h2>
+                <p className="text-sm uppercase tracking-[0.16em] text-emerald-400 mt-1">{user?.role || 'citizen'} account</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {profileItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label} className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
+                      <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                        <Icon size={16} />
+                      </div>
+                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                      <p className="mt-1 text-sm text-slate-100 break-words">{item.value}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
-
-        {/* Sign out */}
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 px-5 py-3 bg-rose-500/10 hover:bg-rose-500 border border-rose-500/20 hover:border-rose-500 text-rose-400 hover:text-white font-bold rounded-xl transition-all text-sm"
-        >
-          <LogOut size={16} />
-          Sign Out
-        </button>
-
-      </div>
-    </AdminLayout>
+      </main>
+    </div>
   );
 };
 

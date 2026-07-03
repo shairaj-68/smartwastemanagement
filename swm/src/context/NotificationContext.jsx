@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import api from '../services/api';
 
 const NotificationContext = createContext(null);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 export const NotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
@@ -12,39 +14,35 @@ export const NotificationProvider = ({ children }) => {
   const unreadCount = notifications.filter(n => n.status === 'unread').length;
 
   useEffect(() => {
-    if (!user) return;
+    if (user) {
+      const socket = io(SOCKET_URL, { withCredentials: true });
+      socket.emit('join-user-room', user.id || user._id);
 
-    // Fetch existing notifications
-    api.get('/notifications').then(res => {
-      setNotifications(res.data.data || []);
-    }).catch(() => {});
+      socket.on('notification', (notification) => {
+        setNotifications(prev => [notification, ...prev]);
+      });
 
-    // Connect socket
-    const socket = io('http://localhost:5000', { withCredentials: true });
-    socket.emit('join-user-room', user._id || user.id);
-
-    socket.on('notification', (notification) => {
-      setNotifications(prev => [notification, ...prev]);
-    });
-
-    return () => socket.disconnect();
+      return () => {
+        socket.disconnect();
+      };
+    }
   }, [user]);
 
-  const markRead = useCallback(async (id) => {
-    await api.patch(`/notifications/${id}/read`);
-    setNotifications(prev => prev.map(n => n._id === id ? { ...n, status: 'read' } : n));
+  const addNotification = useCallback((notification) => {
+    setNotifications(prev => [notification, ...prev]);
   }, []);
 
-  const markAllRead = useCallback(async () => {
-    await api.patch('/notifications/read-all');
-    setNotifications(prev => prev.map(n => ({ ...n, status: 'read' })));
-  }, []);
+  const value = useMemo(() => ({ notifications, addNotification }), [notifications, addNotification]);
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markRead, markAllRead }}>
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );
+};
+
+NotificationProvider.propTypes = {
+  children: PropTypes.node.isRequired,
 };
 
 export const useNotifications = () => {

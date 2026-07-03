@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Upload, Send, AlertCircle, CheckCircle, Tag } from 'lucide-react';
-import { cn } from '../utils/cn';
+import { MapPin, Upload, Send, AlertCircle } from 'lucide-react';
 import api from '../services/api';
+import Sidebar from '../components/Sidebar';
+import { useAuth } from '../context/AuthContext';
 
 const COMPLAINT_TYPES = [
   { value: 'overflow', label: 'Bin Overflow' },
@@ -23,6 +24,7 @@ const CreateComplaint = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -44,7 +46,7 @@ const CreateComplaint = () => {
             coordinates: [position.coords.longitude, position.coords.latitude],
           });
         },
-        (error) => {
+        () => {
           setError('Unable to get location');
         }
       );
@@ -60,34 +62,24 @@ const CreateComplaint = () => {
 
     try {
       if (!formData.coordinates) {
-        setError('Please set location before submitting');
-        setLoading(false);
+        setError('Please add your current location before submitting');
         return;
       }
 
-      const payload = {
-        type: formData.type,
+      const createResponse = await api.post('/complaints', {
         description: formData.description,
         coordinates: formData.coordinates,
-      };
+      });
 
-      const response = await api.post('/complaints', payload);
-      const complaintId = response.data.data._id;
+      const complaintId = createResponse.data.data._id;
 
       if (formData.image) {
-        try {
-          const imageData = new FormData();
-          imageData.append('image', formData.image);
-          await api.post(`/complaints/${complaintId}/image`, imageData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-        } catch (imageErr) {
-          console.warn('Image upload failed, complaint created:', imageErr);
-        }
+        const uploadData = new FormData();
+        uploadData.append('image', formData.image);
+        await api.post(`/complaints/${complaintId}/image`, uploadData);
       }
 
-      setSuccess(true);
-      setTimeout(() => navigate('/complaints'), 1500);
+      navigate('/complaints');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create complaint');
     } finally {
@@ -96,112 +88,97 @@ const CreateComplaint = () => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-2xl p-8 border border-white/5 shadow-2xl">
-      <div>
-        <h1 className="text-2xl font-black text-white">Report a Complaint</h1>
-        <p className="text-slate-500">Submit a waste collection issue — workers will be notified immediately</p>
-        <p className="text-xs text-slate-600 mt-1">{new Date().toLocaleString()}</p>
-      </div>
+    <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
+      <Sidebar role={user?.role || 'citizen'} onLogout={logout} />
+      <main className="flex-1 min-w-0 transition-all duration-300 lg:px-8 py-6">
+        <div className="px-6 md:px-0">
+          <div className="mx-auto max-w-3xl space-y-8">
+            <div className="rounded-[2rem] border border-white/5 bg-slate-900/40 p-6 md:p-8 shadow-2xl backdrop-blur-sm relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.08),transparent_28%)] pointer-events-none" />
+              <div className="relative space-y-3">
+                <span className="inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-400">
+                  Citizen intake
+                </span>
+                <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">Create New Complaint</h1>
+                <p className="max-w-2xl text-sm md:text-base text-slate-400">
+                  Report waste collection issues with the same dashboard styling used across the rest of the app.
+                </p>
+              </div>
+            </div>
 
-      {success && (
-        <div className="flex items-center gap-2 p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 font-bold">
-          <CheckCircle size={18} />
-          Complaint submitted! Redirecting...
-        </div>
-      )}
+            <form onSubmit={handleSubmit} className="space-y-6 rounded-[2rem] border border-white/5 bg-slate-900/40 p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+              {error && (
+                <div className="flex items-center gap-2 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-200">
+                  <AlertCircle size={16} />
+                  {error}
+                </div>
+              )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
-            <AlertCircle size={16} />
-            {error}
-          </div>
-        )}
+              <div className="space-y-2">
+                <label htmlFor="complaint-description" className="block text-sm font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
+                <textarea
+                  id="complaint-description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Describe the waste collection issue..."
+                  className="w-full rounded-2xl border border-white/5 bg-slate-950/70 px-4 py-4 text-white placeholder:text-slate-600 outline-none transition-all focus:border-emerald-500/30 focus:ring-2 focus:ring-emerald-500/10"
+                  rows={4}
+                  required
+                />
+              </div>
 
-        {/* Type */}
-        <div>
-          <label className="block text-sm font-bold text-slate-300 mb-2 flex items-center gap-2">
-            <Tag size={14} /> Complaint Type
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {COMPLAINT_TYPES.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setFormData({ ...formData, type: value })}
-                className={cn(
-                  'px-3 py-2 rounded-xl border text-xs font-bold transition-all',
-                  formData.type === value
-                    ? 'bg-emerald-500 border-emerald-500 text-slate-950'
-                    : 'bg-slate-900 border-white/5 text-slate-400 hover:border-white/20 hover:text-white'
+              <div className="space-y-2">
+                <label htmlFor="complaint-location" className="block text-sm font-bold uppercase tracking-[0.18em] text-slate-400">Location</label>
+                <button
+                  id="complaint-location"
+                  type="button"
+                  onClick={getCurrentLocation}
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/5 bg-slate-950/70 px-4 py-3 font-semibold text-slate-200 transition-all hover:border-emerald-500/20 hover:text-emerald-300"
+                >
+                  <MapPin size={16} />
+                  Use Current Location
+                </button>
+                {formData.coordinates && (
+                  <p className="text-sm font-medium text-emerald-400 mt-2">
+                    Coordinates: {formData.coordinates[0]}, {formData.coordinates[1]}
+                  </p>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="complaint-image" className="block text-sm font-bold uppercase tracking-[0.18em] text-slate-400">Image (Optional)</label>
+                <input
+                  id="complaint-image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="complaint-image"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/5 bg-slate-950/70 px-4 py-3 font-semibold text-slate-200 transition-all hover:border-emerald-500/20 hover:text-emerald-300"
+                >
+                  <Upload size={16} />
+                  Upload Image
+                </label>
+                {formData.image && (
+                  <p className="text-sm font-medium text-emerald-400 mt-2">{formData.image.name}</p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3.5 font-black text-slate-950 transition-all hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {label}
+                <Send size={16} />
+                {loading ? 'Submitting...' : 'Submit Complaint'}
               </button>
-            ))}
+            </form>
           </div>
         </div>
-
-        <div>
-          <label className="block text-sm font-bold text-slate-300 mb-2">Description</label>
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            placeholder="Describe the waste collection issue..."
-            className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-            rows={4}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-bold text-slate-300 mb-2">Location</label>
-          <button
-            type="button"
-            onClick={getCurrentLocation}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-white/5 rounded-xl hover:border-emerald-500/20 transition-colors text-slate-300"
-          >
-            <MapPin size={16} />
-            Use Current Location
-          </button>
-          {formData.coordinates && (
-            <p className="text-sm text-emerald-400 mt-2">
-              Coordinates: {formData.coordinates[0]}, {formData.coordinates[1]}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-bold text-slate-300 mb-2">Image (Optional)</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="hidden"
-            id="image-upload"
-          />
-          <label
-            htmlFor="image-upload"
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-white/5 rounded-xl hover:border-emerald-500/20 transition-colors cursor-pointer text-slate-300"
-          >
-            <Upload size={16} />
-            Upload Image
-          </label>
-          {formData.image && (
-            <p className="text-sm text-emerald-400 mt-2">{formData.image.name}</p>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-emerald-500 text-slate-950 font-bold rounded-xl hover:bg-emerald-400 disabled:opacity-50 transition-colors"
-        >
-          <Send size={16} />
-          {loading ? 'Submitting...' : 'Submit Complaint'}
-        </button>
-      </form>
+      </main>
     </div>
   );
 };

@@ -1,8 +1,9 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ allowedRoles = [], children }) => {
+const ProtectedRoute = ({ allowedRoles = [], children = null }) => {
   const { user, loading } = useAuth();
 
   if (loading) return null;
@@ -18,7 +19,16 @@ const ProtectedRoute = ({ allowedRoles = [], children }) => {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return children ?? <Outlet />;
+  if (children) {
+    return children;
+  }
+
+  return <Outlet />;
+};
+
+ProtectedRoute.propTypes = {
+  allowedRoles: PropTypes.arrayOf(PropTypes.string),
+  children: PropTypes.node,
 };
 
 export default ProtectedRoute;

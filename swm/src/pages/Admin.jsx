@@ -1,56 +1,52 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Trash2, UserCheck, AlertCircle, CheckCircle, MapPin, Clock, UserPlus } from 'lucide-react';
-import { cn } from '../utils/cn';
+import React, { useEffect, useMemo, useState } from 'react';
+import PropTypes from 'prop-types';
+import { Users, BarChart3, UserCheck, Shield, ClipboardList, Activity, Trash2, UserRoundCheck, RefreshCw } from 'lucide-react';
+import Sidebar from '../components/Sidebar';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import AdminLayout from '../layouts/AdminLayout';
 
+const ACTIVE_STATUSES = new Set(['reported', 'assigned', 'in_progress']);
+const RESOLVED_STATUSES = new Set(['cleaned', 'closed']);
+
 const Admin = () => {
+  const { user, logout } = useAuth();
   const [users, setUsers] = useState([]);
   const [kpi, setKpi] = useState({ activeComplaints: 0, resolvedToday: 0, binsNearFull: 0, workersOnDuty: 0 });
   const [complaints, setComplaints] = useState([]);
-  const [selectedWorker, setSelectedWorker] = useState({});
+  const [selectedWorkers, setSelectedWorkers] = useState({});
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [error, setError] = useState('');
 
   const fetchData = async () => {
     try {
+      setError('');
       const [usersRes, analyticsRes, complaintsRes] = await Promise.all([
         api.get('/admin/users'),
         api.get('/admin/analytics'),
-        api.get('/complaints'), // For deleting and assignment
+        api.get('/complaints', { params: { limit: 100 } }),
       ]);
 
       setUsers(usersRes.data.data || []);
-      const d = analyticsRes.data.data || {};
-      setKpi({
-        activeComplaints: d.activeComplaints ?? 0,
-        resolvedToday:    d.resolvedToday    ?? 0,
-        binsNearFull:     d.binsNearFull     ?? 0,
-        workersOnDuty:    d.workersOnDuty    ?? 0,
-      });
-      setComplaints(complaintsRes.data.data?.items || []);
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
+      setAnalytics(analyticsRes.data.data || {});
+      setComplaints(complaintsRes.data.data.items || []);
+    } catch (fetchError) {
+      setError(fetchError.response?.data?.message || 'Error fetching admin data');
     } finally {
       setLoading(false);
     }
   };
 
-  const assignWorker = async (complaintId) => {
-    const workerId = selectedWorker[complaintId];
-    if (!workerId) {
-      return;
-    }
+  useEffect(() => {
+    fetchData();
+  }, []);
 
+  const assignWorker = async (complaintId, workerId) => {
     try {
       await api.post('/admin/assign-worker', { complaintId, workerId });
-      fetchData(); // Refresh
-      setSelectedWorker((prev) => ({ ...prev, [complaintId]: '' }));
-    } catch (error) {
-      console.error('Error assigning worker:', error);
+      fetchData();
+    } catch (assignError) {
+      setError(assignError.response?.data?.message || 'Error assigning worker');
     }
   };
 
@@ -58,25 +54,61 @@ const Admin = () => {
 
 
   const deleteComplaint = async (id) => {
-    if (window.confirm('Are you sure you want to delete this complaint?')) {
+    if (globalThis.confirm('Are you sure you want to delete this complaint?')) {
       try {
         await api.delete(`/admin/complaints/${id}`);
-        fetchData(); // Refresh
-      } catch (error) {
-        console.error('Error deleting complaint:', error);
+        fetchData();
+      } catch (deleteError) {
+        setError(deleteError.response?.data?.message || 'Error deleting complaint');
       }
     }
   };
 
-  if (loading) {
-    return (
-      <AdminLayout title="Admin Panel" subtitle="Smart Waste Management">
-        <div className="flex justify-center items-center h-64">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      </AdminLayout>
-    );
-  }
+  const workers = useMemo(() => users.filter((item) => item.role === 'worker'), [users]);
+
+  const metrics = useMemo(() => {
+    const totalComplaints = analytics.totalComplaints || complaints.length;
+    const openComplaints = complaints.filter((item) => ACTIVE_STATUSES.has(item.status)).length;
+    const resolvedComplaints = complaints.filter((item) => RESOLVED_STATUSES.has(item.status)).length;
+    const completionRate = totalComplaints > 0 ? Math.round((resolvedComplaints / totalComplaints) * 100) : 0;
+    const unassigned = complaints.filter((item) => !item.assignedWorker).length;
+
+    return {
+      totalUsers: analytics.totalUsers || users.length || 0,
+      totalComplaints,
+      openComplaints,
+      completionRate,
+      activeWorkers: (analytics.usersByRole || []).find((item) => item._id === 'worker')?.count || workers.length,
+      unassigned,
+    };
+  }, [analytics, complaints, users, workers]);
+
+  const workerStats = useMemo(() => {
+    return workers.map((worker) => {
+      const activeCount = complaints.filter((item) => {
+        const assignedId = typeof item.assignedWorker === 'string' ? item.assignedWorker : item.assignedWorker?._id;
+        return assignedId === (worker.id || worker._id) && ACTIVE_STATUSES.has(item.status);
+      }).length;
+
+      return {
+        ...worker,
+        activeCount,
+      };
+    });
+  }, [workers, complaints]);
+
+  const activityFeed = useMemo(() => {
+    return [...complaints]
+      .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+      .slice(0, 10)
+      .map((item) => ({
+        id: item._id,
+        citizen: item.user?.name || 'Citizen',
+        worker: item.assignedWorker?.name || 'Unassigned',
+        status: item.status,
+        updatedAt: item.updatedAt || item.createdAt,
+      }));
+  }, [complaints]);
 
   const STATUS_STYLE = {
     pending:     'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
@@ -89,145 +121,31 @@ const Admin = () => {
   };
 
   return (
-    <AdminLayout title="Admin Panel" subtitle="Smart Waste Management">
-      <div className="space-y-8">
+    <div className="flex min-h-screen bg-slate-950 font-sans text-slate-100 selection:bg-emerald-500/30 overflow-x-hidden">
+      <Sidebar role={user?.role || 'admin'} onLogout={logout} />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-rose-500/10 rounded-xl text-rose-400 group-hover:bg-rose-500 group-hover:text-white transition-all">
-              <AlertCircle size={20} />
-            </div>
-            <span className={cn('text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg',
-              kpi.activeComplaints > 0 ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'
-            )}>
-              {kpi.activeComplaints > 0 ? 'Needs Action' : 'All Clear'}
-            </span>
-          </div>
-          <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Active Complaints</h4>
-          <p className="text-3xl font-black text-rose-400">{kpi.activeComplaints}</p>
-        </div>
-
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-emerald-500/10 rounded-xl text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-900 transition-all">
-              <CheckCircle size={20} />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400">
-              Today
-            </span>
-          </div>
-          <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Resolved Today</h4>
-          <p className="text-3xl font-black text-emerald-400">{kpi.resolvedToday}</p>
-        </div>
-
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-orange-500/10 rounded-xl text-orange-400 group-hover:bg-orange-500 group-hover:text-white transition-all">
-              <Trash2 size={20} />
-            </div>
-            <span className={cn('text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg',
-              kpi.binsNearFull > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-emerald-500/10 text-emerald-400'
-            )}>
-              {kpi.binsNearFull > 0 ? 'Urgent' : 'OK'}
-            </span>
-          </div>
-          <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Bins Near Full</h4>
-          <p className="text-3xl font-black text-orange-400">{kpi.binsNearFull}</p>
-        </div>
-
-        <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[1.5rem] p-6 shadow-xl hover:shadow-2xl transition-all hover:bg-slate-900 group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-blue-500/10 rounded-xl text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-all">
-              <Users size={20} />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400">
-              Registered
-            </span>
-          </div>
-          <h4 className="text-xs text-slate-500 font-bold uppercase tracking-widest mb-1">Workers on Duty</h4>
-          <p className="text-3xl font-black text-blue-400">{kpi.workersOnDuty}</p>
-        </div>
-      </div>
-
-      {/* Users Panel */}
-      <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-white/5">
-          <div>
-            <h3 className="text-lg font-bold text-white tracking-tight">Registered Users</h3>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">{users.length} total accounts</p>
-          </div>
-          <UserPlus size={18} className="text-slate-500" />
-        </div>
-        <div className="divide-y divide-white/5">
-          {users.map(u => (
-            <div key={u._id} className="flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-slate-800 flex items-center justify-center font-black text-sm text-white">
-                  {u.name?.[0]?.toUpperCase()}
-                </div>
+      <main className="flex-1 min-w-0 transition-all duration-300 lg:px-8 py-6">
+        <div className="px-6 md:px-0">
+          <div className="mx-auto max-w-7xl space-y-8">
+            <div className="rounded-[2rem] border border-white/5 bg-slate-900/40 p-6 md:p-8 shadow-2xl backdrop-blur-sm relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.14),transparent_30%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.08),transparent_28%)] pointer-events-none" />
+              <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <p className="text-sm font-bold text-white">{u.name}</p>
-                  <p className="text-xs text-slate-500">{u.email}</p>
+                  <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white">Admin Command Center</h1>
+                  <p className="mt-2 text-sm md:text-base text-slate-400">Monitor platform activity, assign workforce, and enforce service quality.</p>
                 </div>
-              </div>
-              <span className={cn('px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border',
-                u.role === 'admin'   ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                u.role === 'worker'  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                'bg-slate-700/10 text-slate-400 border-slate-700/20'
-              )}>
-                {u.role}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Complaints Management Panel */}
-      <div className="bg-slate-900/40 backdrop-blur-sm border border-white/5 rounded-[2rem] shadow-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5">
-          <h3 className="text-lg font-bold text-white tracking-tight">Complaints Management</h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">Assign workers and manage complaint lifecycle</p>
-        </div>
-        <div className="divide-y divide-white/5">
-          {complaints.length === 0 ? (
-            <div className="py-16 text-center text-slate-600 text-xs font-bold uppercase tracking-widest">
-              No complaints found
-            </div>
-          ) : complaints.map(complaint => (
-            <div key={complaint._id} className="p-6 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-start justify-between gap-4 mb-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold truncate">{complaint.description}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    {complaint.type && (
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
-                        {complaint.type.replace('_', ' ')}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
-                      <Clock size={10} />{new Date(complaint.createdAt).toLocaleDateString()}
-                    </span>
-                    {complaint.location?.coordinates && (
-                      <span className="flex items-center gap-1 text-[10px] text-slate-500 font-bold">
-                        <MapPin size={10} />
-                        {complaint.location.coordinates[1].toFixed(3)}, {complaint.location.coordinates[0].toFixed(3)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={cn('px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border',
-                    STATUS_STYLE[complaint.status] || 'bg-slate-700/10 text-slate-400 border-slate-700/20'
-                  )}>
-                    {complaint.status}
-                  </span>
+                <div className="flex flex-wrap items-center gap-3">
                   <button
-                    onClick={() => deleteComplaint(complaint._id)}
-                    className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all"
+                    type="button"
+                    onClick={fetchData}
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm font-bold text-slate-200 hover:border-emerald-500/30 hover:text-emerald-300"
                   >
-                    <Trash2 size={14} />
+                    <RefreshCw size={14} />
+                    Refresh Data
+                  </button>
+                  <button type="button" className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-emerald-400">
+                    Export Report
                   </button>
                 </div>
               </div>
@@ -262,12 +180,136 @@ const Admin = () => {
                 )}
               </div>
             </div>
-          ))}
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <StatCard title="Total Users" value={metrics.totalUsers} icon={<Users size={16} className="text-emerald-400" />} />
+              <StatCard title="Total Complaints" value={metrics.totalComplaints} icon={<ClipboardList size={16} className="text-cyan-400" />} />
+              <StatCard title="Open Complaints" value={metrics.openComplaints} icon={<Activity size={16} className="text-rose-400" />} />
+              <StatCard title="Completion Rate" value={`${metrics.completionRate}%`} icon={<BarChart3 size={16} className="text-blue-400" />} />
+              <StatCard title="Active Workers" value={metrics.activeWorkers} icon={<UserCheck size={16} className="text-green-400" />} />
+              <StatCard title="Unassigned Tickets" value={metrics.unassigned} icon={<Shield size={16} className="text-yellow-300" />} />
+            </div>
+
+            {error && (
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>
+            )}
+
+            {loading ? (
+              <div className="rounded-[1.5rem] border border-white/5 bg-slate-900/40 p-8 text-center text-slate-400">Loading admin panel...</div>
+            ) : (
+              <>
+                <section className="rounded-[1.5rem] border border-white/5 bg-slate-900/40 p-5 md:p-6 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-black text-white mb-4">Complaint Operations</h2>
+                  <div className="space-y-3">
+                    {complaints.map((complaint) => (
+                      <div key={complaint._id} className="rounded-xl border border-white/5 bg-slate-950/55 p-4">
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1">Ticket #{complaint._id?.slice(-6)}</p>
+                            <p className="text-sm md:text-base font-bold text-white">{complaint.description}</p>
+                            <p className="mt-1 text-xs text-slate-400">Status: {complaint.status}</p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={selectedWorkers[complaint._id] || ''}
+                              onChange={(event) => setSelectedWorkers((prev) => ({ ...prev, [complaint._id]: event.target.value }))}
+                              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-1.5 text-xs text-white"
+                            >
+                              <option value="">Select worker</option>
+                              {workers.map((worker) => (
+                                <option key={worker.id || worker._id} value={worker.id || worker._id}>{worker.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => assignWorker(complaint._id, selectedWorkers[complaint._id])}
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-400 disabled:opacity-50"
+                              disabled={!selectedWorkers[complaint._id]}
+                            >
+                              <UserRoundCheck size={12} />
+                              Assign
+                            </button>
+                            <button
+                              onClick={() => deleteComplaint(complaint._id)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-rose-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-400"
+                            >
+                              <Trash2 size={12} />
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {complaints.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/20 p-6 text-center text-slate-500">No complaints found.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[1.5rem] border border-white/5 bg-slate-900/40 p-5 md:p-6 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-black text-white mb-4">Workforce</h2>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {workerStats.map((worker) => (
+                      <div key={worker.id || worker._id} className="rounded-xl border border-white/5 bg-slate-950/55 p-4">
+                        <p className="text-sm font-bold text-white">{worker.name}</p>
+                        <p className="text-xs text-slate-400 mt-1">{worker.email}</p>
+                        <p className="mt-3 text-xs uppercase tracking-[0.16em] text-emerald-400">Active tasks: {worker.activeCount}</p>
+                      </div>
+                    ))}
+                    {workerStats.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/20 p-6 text-center text-slate-500 md:col-span-2">No workers found.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[1.5rem] border border-white/5 bg-slate-900/40 p-5 md:p-6 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-black text-white mb-4">Activity Monitor</h2>
+                  <div className="space-y-3">
+                    {activityFeed.map((activity) => (
+                      <div key={activity.id} className="rounded-xl border border-white/5 bg-slate-950/55 p-4">
+                        <p className="text-sm font-bold text-white">Ticket #{activity.id?.slice(-6)} • {activity.status}</p>
+                        <p className="mt-1 text-xs text-slate-400">Citizen: {activity.citizen} • Worker: {activity.worker}</p>
+                        <p className="mt-2 text-xs uppercase tracking-[0.16em] text-emerald-400">Updated: {activity.updatedAt ? new Date(activity.updatedAt).toLocaleString() : 'N/A'}</p>
+                      </div>
+                    ))}
+                    {activityFeed.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-white/10 bg-slate-900/20 p-6 text-center text-slate-500">No activity found.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-[1.5rem] border border-white/5 bg-slate-900/40 p-5 md:p-6 shadow-xl backdrop-blur-sm">
+                  <h2 className="text-xl font-black text-white mb-4">Governance Controls</h2>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <button type="button" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left text-sm font-bold text-slate-200 hover:border-emerald-500/30">Manage users</button>
+                    <button type="button" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left text-sm font-bold text-slate-200 hover:border-emerald-500/30">Audit logs</button>
+                    <button type="button" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left text-sm font-bold text-slate-200 hover:border-emerald-500/30">Broadcast notice</button>
+                    <button type="button" className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-left text-sm font-bold text-slate-200 hover:border-emerald-500/30">System health</button>
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-      </div>
-    </AdminLayout>
+      </main>
+    </div>
   );
+};
+
+const StatCard = ({ title, value, icon }) => (
+  <div className="rounded-2xl border border-white/5 bg-slate-900/40 p-4 shadow-xl backdrop-blur-sm">
+    <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/5">
+      {icon}
+    </div>
+    <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">{title}</p>
+    <p className="mt-2 text-2xl font-black text-white">{value}</p>
+  </div>
+);
+
+StatCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  icon: PropTypes.node.isRequired,
 };
 
 export default Admin;
