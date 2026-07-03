@@ -196,7 +196,6 @@ const Complaints = () => {
       </div>
       </main>
     </div>
-    </AdminLayout>
   );
 };
 

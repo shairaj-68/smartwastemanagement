@@ -186,12 +186,6 @@ const Worker = () => {
                     No activity yet.
                   </div>
                 )}
-                {(complaint.status === 'resolved' || complaint.status === 'cleaned') && (
-                  <div className="flex-1 px-4 py-2 bg-green-500/20 text-green-400 font-bold rounded-lg flex items-center justify-center gap-2 text-sm border border-green-500/20">
-                    <CheckCircle size={14} />
-                    Resolved
-                  </div>
-                )}
               </div>
             </section>
 
@@ -303,7 +297,6 @@ const Worker = () => {
         </div>
       </main>
     </div>
-    </AdminLayout>
   );
 };
 
